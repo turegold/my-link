@@ -11,18 +11,18 @@ export default async function ProfilePage({
   return (
     <div className="min-h-screen bg-neutral-100 dark:bg-neutral-900 flex flex-col items-center py-16 px-4 font-sans text-neutral-900 dark:text-neutral-100">
       <div className="w-full max-w-md space-y-8">
-        {/* Profile Info Placeholder */}
+        {/* 프로필 정보 (임시) */}
         <div className="flex flex-col items-center space-y-4">
           <div className="w-24 h-24 rounded-full bg-neutral-300 dark:bg-neutral-700 flex items-center justify-center text-3xl font-bold">
             {displayName[0]?.toUpperCase() || "U"}
           </div>
           <h1 className="text-2xl font-bold">@{displayName}</h1>
           <p className="text-neutral-600 dark:text-neutral-400">
-            Welcome to my links!
+            마이링크를 찾아주셔서 감사합니다.
           </p>
         </div>
 
-        {/* Links Section */}
+        {/* 링크 목록 섹션 */}
         <div className="flex flex-col space-y-4 w-full">
           {dummyLinks.map((link) => (
             <a

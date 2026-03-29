@@ -33,7 +33,7 @@ export const dummyLinks: Link[] = [
   {
     id: "5",
     title: "포트폴리오",
-    url: "https://portfolio.example.com",
-    icon: "https://s2.googleusercontent.com/s2/favicons?domain=portfolio.example.com"
+    url: "/portfolio",
+    icon: "https://s2.googleusercontent.com/s2/favicons?domain=example.com"
   }
 ];

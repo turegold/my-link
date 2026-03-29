@@ -1,17 +1,6 @@
-import Hero from "../components/Hero";
-import About from "../components/About";
-import Skills from "../components/Skills";
-import Projects from "../components/Projects";
-import Contact from "../components/Contact";
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return (
-    <main className="min-h-screen font-sans selection:bg-black selection:text-white dark:selection:bg-white dark:selection:text-black pb-[env(safe-area-inset-bottom)]">
-      <Hero />
-      <About />
-      <Skills />
-      <Projects />
-      <Contact />
-    </main>
-  );
+  // 첫 접속 시 turegold의 링크트리 페이지로 리디렉션
+  redirect("/turegold");
 }

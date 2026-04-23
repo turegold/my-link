@@ -33,12 +33,15 @@ const formSchema = z.object({
   }, { message: "유효한 도메인 또는 URL을 입력해주세요." }),
 });
 
-export default function LinkManager({ initialLinks }: { initialLinks: LinkType[] }) {
-  const [links, setLinks] = useState<LinkType[]>(initialLinks);
+export default function LinkManager() {
+  const [links, setLinks] = useState<LinkType[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
+    setIsMounted(true);
     const q = query(
       collection(db, "users", "anonymous", "links"),
       orderBy("createdAt", "desc")
@@ -49,15 +52,16 @@ export default function LinkManager({ initialLinks }: { initialLinks: LinkType[]
         id: doc.id,
         ...doc.data(),
       })) as LinkType[];
-      
-      setLinks(fetchedLinks.length > 0 ? fetchedLinks : initialLinks);
+      setLinks(fetchedLinks);
+      setIsLoading(false);
     }, (error) => {
       console.error("Error fetching links:", error);
       toast.error("링크 목록을 불러오는데 실패했습니다.");
+      setIsLoading(false);
     });
 
     return () => unsubscribe();
-  }, [initialLinks]);
+  }, []);
 
   const {
     register,
@@ -104,6 +108,14 @@ export default function LinkManager({ initialLinks }: { initialLinks: LinkType[]
       setIsSubmitting(false);
     }
   };
+
+  if (!isMounted) {
+    return (
+      <div className="flex justify-center py-8 w-full">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col space-y-4 w-full">
@@ -160,7 +172,11 @@ export default function LinkManager({ initialLinks }: { initialLinks: LinkType[]
       </Dialog>
 
       {/* 링크 목록 */}
-      {links.map((link) => (
+      {isLoading ? (
+        <div className="flex justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      ) : links.map((link) => (
         <a
           key={link.id}
           href={link.url}

@@ -1,4 +1,3 @@
-import { dummyLinks } from "@/data/links";
 import { Card } from "@/components/ui/card";
 import LinkManager from "@/components/LinkManager";
 
@@ -24,7 +23,7 @@ export default async function ProfilePage({
         </div>
 
         {/* 링크 목록 및 관리 섹션 */}
-        <LinkManager initialLinks={dummyLinks} />
+        <LinkManager />
       </div>
     </div>
   );

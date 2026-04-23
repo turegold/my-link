@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link as LinkType } from "@/data/links";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,9 @@ import { Label } from "@/components/ui/label";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { toast } from "sonner";
 
 const formSchema = z.object({
   title: z.string().trim().min(1, { message: "제목을 최소 1자 이상 입력해주세요." }),
@@ -33,6 +36,28 @@ const formSchema = z.object({
 export default function LinkManager({ initialLinks }: { initialLinks: LinkType[] }) {
   const [links, setLinks] = useState<LinkType[]>(initialLinks);
   const [isOpen, setIsOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    const q = query(
+      collection(db, "users", "anonymous", "links"),
+      orderBy("createdAt", "desc")
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetchedLinks = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as LinkType[];
+      
+      setLinks(fetchedLinks.length > 0 ? fetchedLinks : initialLinks);
+    }, (error) => {
+      console.error("Error fetching links:", error);
+      toast.error("링크 목록을 불러오는데 실패했습니다.");
+    });
+
+    return () => unsubscribe();
+  }, [initialLinks]);
 
   const {
     register,
@@ -47,7 +72,8 @@ export default function LinkManager({ initialLinks }: { initialLinks: LinkType[]
     },
   });
 
-  const onSubmit = (values: z.infer<typeof formSchema>) => {
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    setIsSubmitting(true);
     let parsedUrl = values.url;
     if (!/^https?:\/\//i.test(values.url)) {
       parsedUrl = `https://${values.url}`;
@@ -60,16 +86,23 @@ export default function LinkManager({ initialLinks }: { initialLinks: LinkType[]
       domain = "example.com";
     }
 
-    const newLink: LinkType = {
-      id: Date.now().toString(),
-      title: values.title,
-      url: parsedUrl,
-      icon: `https://s2.googleusercontent.com/s2/favicons?domain=${domain}`,
-    };
+    try {
+      await addDoc(collection(db, "users", "anonymous", "links"), {
+        title: values.title,
+        url: parsedUrl,
+        icon: `https://s2.googleusercontent.com/s2/favicons?domain=${domain}`,
+        createdAt: serverTimestamp(),
+      });
 
-    setLinks([newLink, ...links]);
-    setIsOpen(false);
-    reset();
+      toast.success("새로운 링크가 추가되었습니다.");
+      setIsOpen(false);
+      reset();
+    } catch (error) {
+      console.error("Error adding link:", error);
+      toast.error("링크 추가에 실패했습니다.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -119,8 +152,8 @@ export default function LinkManager({ initialLinks }: { initialLinks: LinkType[]
                 <p className="text-sm text-destructive font-medium">{errors.url.message}</p>
               )}
             </div>
-            <Button type="submit" className="w-full">
-              추가하기
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? "추가 중..." : "추가하기"}
             </Button>
           </form>
         </DialogContent>

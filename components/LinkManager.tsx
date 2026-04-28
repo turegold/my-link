@@ -80,6 +80,7 @@ function LinkItem({ link }: { link: LinkType }) {
         title: values.title,
         url: parsedUrl,
         icon: `https://s2.googleusercontent.com/s2/favicons?domain=${domain}`,
+        updatedAt: serverTimestamp(),
       });
       toast.success("링크가 수정되었습니다.");
       setIsEditing(false);
@@ -156,16 +157,16 @@ function LinkItem({ link }: { link: LinkType }) {
         rel="noopener noreferrer"
         className="block w-full hover:-translate-y-1 hover:shadow-md transition-all duration-200 active:translate-y-0 active:shadow-sm"
       >
-        <Card className="flex items-center p-4 bg-card text-card-foreground border-border rounded-xl">
+        <Card className="flex flex-row items-center p-4 bg-card text-card-foreground border-border rounded-xl">
           {link.icon ? (
-            <div className="w-10 flex justify-center flex-shrink-0">
+            <div className="flex-shrink-0 mr-4">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={link.icon} alt={link.title} className="w-6 h-6 rounded-sm" />
+              <img src={link.icon} alt={link.title} className="w-8 h-8 rounded-sm object-contain" />
             </div>
           ) : (
-            <div className="w-10 flex-shrink-0" />
+            <div className="w-8 h-8 mr-4 flex-shrink-0" />
           )}
-          <span className="flex-1 text-center font-bold text-lg pr-20 tracking-tight truncate">
+          <span className="flex-1 text-left font-bold text-lg pr-16 tracking-tight truncate">
             {link.title}
           </span>
         </Card>

@@ -22,6 +22,8 @@ import { db } from "@/lib/firebase";
 import { toast } from "sonner";
 import { IconEdit, IconTrash } from "@tabler/icons-react";
 
+import { useAuth } from "@/components/AuthProvider";
+
 const formSchema = z.object({
   title: z.string().trim().min(1, { message: "제목을 최소 1자 이상 입력해주세요." }),
   url: z.string().trim().min(1, { message: "URL을 입력해주세요." }).refine(val => {
@@ -34,7 +36,13 @@ const formSchema = z.object({
   }, { message: "유효한 도메인 또는 URL을 입력해주세요." }),
 });
 
-function LinkItem({ link }: { link: LinkType }) {
+interface LinkItemProps {
+  link: LinkType;
+  targetUid: string;
+  isOwner: boolean;
+}
+
+function LinkItem({ link, targetUid, isOwner }: LinkItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -75,7 +83,7 @@ function LinkItem({ link }: { link: LinkType }) {
 
     try {
       if (!link.id) return;
-      const linkRef = doc(db, "users", "anonymous", "links", link.id);
+      const linkRef = doc(db, "users", targetUid, "links", link.id);
       await updateDoc(linkRef, {
         title: values.title,
         url: parsedUrl,
@@ -96,7 +104,7 @@ function LinkItem({ link }: { link: LinkType }) {
     setIsDeleting(true);
     try {
       if (!link.id) return;
-      const linkRef = doc(db, "users", "anonymous", "links", link.id);
+      const linkRef = doc(db, "users", targetUid, "links", link.id);
       await deleteDoc(linkRef);
       toast.success("링크가 삭제되었습니다.");
       setIsDeleteDialogOpen(false);
@@ -173,59 +181,63 @@ function LinkItem({ link }: { link: LinkType }) {
       </a>
 
       {/* 액션 버튼 */}
-      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 z-10">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-muted"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setIsEditing(true);
-          }}
-        >
-          <IconEdit className="w-5 h-5" />
-        </Button>
-        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-          <DialogTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-              />
-            }
+      {isOwner && (
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 z-10">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-muted"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsEditing(true);
+            }}
           >
-            <IconTrash className="w-5 h-5" />
-          </DialogTrigger>
-          <DialogContent onClick={(e) => e.stopPropagation()} className="sm:max-w-[400px]">
-            <DialogHeader>
-              <DialogTitle className="text-center text-xl">정말 삭제하시겠습니까?</DialogTitle>
-            </DialogHeader>
-            <div className="py-6 space-y-3">
-              <p className="font-bold text-xl text-center text-foreground break-all px-4">{link.title}</p>
-              <p className="text-destructive text-center font-semibold text-base">이 작업은 되돌릴 수 없습니다.</p>
-            </div>
-            <div className="flex gap-3 w-full">
-              <Button variant="outline" className="flex-1 h-12 text-base" onClick={() => setIsDeleteDialogOpen(false)} disabled={isDeleting}>
-                취소
-              </Button>
-              <Button variant="destructive" className="flex-1 h-12 text-base" onClick={handleDelete} disabled={isDeleting}>
-                {isDeleting ? "삭제 중..." : "삭제하기"}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+            <IconEdit className="w-5 h-5" />
+          </Button>
+          <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+            <DialogTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                />
+              }
+            >
+              <IconTrash className="w-5 h-5" />
+            </DialogTrigger>
+            <DialogContent onClick={(e) => e.stopPropagation()} className="sm:max-w-[400px]">
+              <DialogHeader>
+                <DialogTitle className="text-center text-xl">정말 삭제하시겠습니까?</DialogTitle>
+              </DialogHeader>
+              <div className="py-6 space-y-3">
+                <p className="font-bold text-xl text-center text-foreground break-all px-4">{link.title}</p>
+                <p className="text-destructive text-center font-semibold text-base">이 작업은 되돌릴 수 없습니다.</p>
+              </div>
+              <div className="flex gap-3 w-full">
+                <Button variant="outline" className="flex-1 h-12 text-base" onClick={() => setIsDeleteDialogOpen(false)} disabled={isDeleting}>
+                  취소
+                </Button>
+                <Button variant="destructive" className="flex-1 h-12 text-base" onClick={handleDelete} disabled={isDeleting}>
+                  {isDeleting ? "삭제 중..." : "삭제하기"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      )}
     </div>
   );
 }
 
-export default function LinkManager() {
+export default function LinkManager({ targetUid }: { targetUid: string }) {
+  const { user } = useAuth();
+  const isOwner = user?.uid === targetUid;
   const [links, setLinks] = useState<LinkType[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -235,7 +247,7 @@ export default function LinkManager() {
   useEffect(() => {
     setIsMounted(true);
     const q = query(
-      collection(db, "users", "anonymous", "links"),
+      collection(db, "users", targetUid, "links"),
       orderBy("createdAt", "desc")
     );
 
@@ -283,7 +295,7 @@ export default function LinkManager() {
     }
 
     try {
-      await addDoc(collection(db, "users", "anonymous", "links"), {
+      await addDoc(collection(db, "users", targetUid, "links"), {
         title: values.title,
         url: parsedUrl,
         icon: `https://s2.googleusercontent.com/s2/favicons?domain=${domain}`,
@@ -312,56 +324,58 @@ export default function LinkManager() {
   return (
     <div className="flex flex-col space-y-4 w-full">
       {/* 링크 추가 버튼 (다이얼로그 트리거) */}
-      <Dialog open={isOpen} onOpenChange={(open) => {
-        setIsOpen(open);
-        if (!open) reset();
-      }}>
-        <DialogTrigger
-          render={
-            <Button
-              variant="outline"
-              className="w-full h-14 border-dashed rounded-xl flex items-center gap-2 text-muted-foreground hover:text-foreground"
-            />
-          }
-        >
-          <span className="text-xl">+</span>
-          <span className="font-semibold text-base">새 링크 추가</span>
-        </DialogTrigger>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>새 링크 추가</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-4">
-            <div className="space-y-2">
-              <Label htmlFor="title" className={errors.title ? "text-destructive" : ""}>제목</Label>
-              <Input
-                id="title"
-                placeholder="예: 내 블로그"
-                {...register("title")}
-                aria-invalid={!!errors.title}
+      {isOwner && (
+        <Dialog open={isOpen} onOpenChange={(open) => {
+          setIsOpen(open);
+          if (!open) reset();
+        }}>
+          <DialogTrigger
+            render={
+              <Button
+                variant="outline"
+                className="w-full h-14 border-dashed rounded-xl flex items-center gap-2 text-muted-foreground hover:text-foreground"
               />
-              {errors.title && (
-                <p className="text-sm text-destructive font-medium">{errors.title.message}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="url" className={errors.url ? "text-destructive" : ""}>URL</Label>
-              <Input
-                id="url"
-                placeholder="예: https://example.com"
-                {...register("url")}
-                aria-invalid={!!errors.url}
-              />
-              {errors.url && (
-                <p className="text-sm text-destructive font-medium">{errors.url.message}</p>
-              )}
-            </div>
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "추가 중..." : "추가하기"}
-            </Button>
-          </form>
-        </DialogContent>
-      </Dialog>
+            }
+          >
+            <span className="text-xl">+</span>
+            <span className="font-semibold text-base">새 링크 추가</span>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>새 링크 추가</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <Label htmlFor="title" className={errors.title ? "text-destructive" : ""}>제목</Label>
+                <Input
+                  id="title"
+                  placeholder="예: 내 블로그"
+                  {...register("title")}
+                  aria-invalid={!!errors.title}
+                />
+                {errors.title && (
+                  <p className="text-sm text-destructive font-medium">{errors.title.message}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="url" className={errors.url ? "text-destructive" : ""}>URL</Label>
+                <Input
+                  id="url"
+                  placeholder="예: https://example.com"
+                  {...register("url")}
+                  aria-invalid={!!errors.url}
+                />
+                {errors.url && (
+                  <p className="text-sm text-destructive font-medium">{errors.url.message}</p>
+                )}
+              </div>
+              <Button type="submit" className="w-full" disabled={isSubmitting}>
+                {isSubmitting ? "추가 중..." : "추가하기"}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* 링크 목록 */}
       {isLoading ? (
@@ -369,7 +383,7 @@ export default function LinkManager() {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
       ) : links.map((link) => (
-        <LinkItem key={link.id} link={link} />
+        <LinkItem key={link.id} link={link} targetUid={targetUid} isOwner={isOwner} />
       ))}
     </div>
   );

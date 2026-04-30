@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/components/AuthProvider";
 import Header from "@/components/Header";
+import QueryProvider from "@/components/QueryProvider";
 
 const inter = Inter({subsets:['latin'],variable:'--font-sans'});
 
@@ -33,13 +34,15 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AuthProvider>
-          <Header />
-          <main className="min-h-[calc(100vh-3.5rem)]">
-            {children}
-          </main>
-          <Toaster />
-        </AuthProvider>
+        <QueryProvider>
+          <AuthProvider>
+            <Header />
+            <main className="min-h-[calc(100vh-3.5rem)]">
+              {children}
+            </main>
+            <Toaster />
+          </AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );

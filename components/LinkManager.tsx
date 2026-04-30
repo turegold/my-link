@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { Link as LinkType } from "@/data/links";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,12 +17,13 @@ import { Label } from "@/components/ui/label";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, doc, updateDoc, deleteDoc } from "firebase/firestore";
+import { collection, addDoc, query, orderBy, serverTimestamp, doc, updateDoc, deleteDoc, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { toast } from "sonner";
 import { IconEdit, IconTrash } from "@tabler/icons-react";
 
 import { useAuth } from "@/components/AuthProvider";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 const formSchema = z.object({
   title: z.string().trim().min(1, { message: "제목을 최소 1자 이상 입력해주세요." }),
@@ -45,8 +46,7 @@ interface LinkItemProps {
 function LinkItem({ link, targetUid, isOwner }: LinkItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const queryClient = useQueryClient();
 
   const {
     register,
@@ -67,22 +67,21 @@ function LinkItem({ link, targetUid, isOwner }: LinkItemProps) {
     }
   }, [isEditing, link, reset]);
 
-  const onEditSubmit = async (values: z.infer<typeof formSchema>) => {
-    setIsSubmitting(true);
-    let parsedUrl = values.url;
-    if (!/^https?:\/\//i.test(values.url)) {
-      parsedUrl = `https://${values.url}`;
-    }
+  const updateMutation = useMutation({
+    mutationFn: async (values: z.infer<typeof formSchema>) => {
+      let parsedUrl = values.url;
+      if (!/^https?:\/\//i.test(values.url)) {
+        parsedUrl = `https://${values.url}`;
+      }
 
-    let domain = "";
-    try {
-      domain = new URL(parsedUrl).hostname;
-    } catch {
-      domain = "example.com";
-    }
+      let domain = "";
+      try {
+        domain = new URL(parsedUrl).hostname;
+      } catch {
+        domain = "example.com";
+      }
 
-    try {
-      if (!link.id) return;
+      if (!link.id) throw new Error("Link ID is missing");
       const linkRef = doc(db, "users", targetUid, "links", link.id);
       await updateDoc(linkRef, {
         title: values.title,
@@ -90,36 +89,73 @@ function LinkItem({ link, targetUid, isOwner }: LinkItemProps) {
         icon: `https://s2.googleusercontent.com/s2/favicons?domain=${domain}`,
         updatedAt: serverTimestamp(),
       });
+    },
+    onMutate: async (values) => {
+      setIsEditing(false); // 즉각적인 UI 피드백 (폼 닫기)
+      
+      await queryClient.cancelQueries({ queryKey: ["links", targetUid] });
+      const previousLinks = queryClient.getQueryData(["links", targetUid]);
+
+      let parsedUrl = values.url;
+      if (!/^https?:\/\//i.test(values.url)) {
+        parsedUrl = `https://${values.url}`;
+      }
+      let domain = "";
+      try { domain = new URL(parsedUrl).hostname; } catch { domain = "example.com"; }
+
+      queryClient.setQueryData(["links", targetUid], (old: LinkType[] | undefined) => {
+        return old?.map(l => l.id === link.id ? { ...l, title: values.title, url: parsedUrl, icon: `https://s2.googleusercontent.com/s2/favicons?domain=${domain}` } : l);
+      });
+
+      return { previousLinks };
+    },
+    onSuccess: () => {
       toast.success("링크가 수정되었습니다.");
-      setIsEditing(false);
-    } catch (error) {
+    },
+    onError: (error, newLink, context) => {
+      queryClient.setQueryData(["links", targetUid], context?.previousLinks);
+      setIsEditing(true); // 에러 발생 시 다시 폼 열기
       console.error("Error updating link:", error);
       toast.error("링크 수정에 실패했습니다.");
-    } finally {
-      setIsSubmitting(false);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["links", targetUid] });
     }
-  };
+  });
 
-  const handleDelete = async () => {
-    setIsDeleting(true);
-    try {
-      if (!link.id) return;
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      if (!link.id) throw new Error("Link ID is missing");
       const linkRef = doc(db, "users", targetUid, "links", link.id);
       await deleteDoc(linkRef);
+    },
+    onMutate: async () => {
+      setIsDeleteDialogOpen(false); // 즉각적인 UI 피드백 (모달 닫기)
+      
+      await queryClient.cancelQueries({ queryKey: ["links", targetUid] });
+      const previousLinks = queryClient.getQueryData(["links", targetUid]);
+      queryClient.setQueryData(["links", targetUid], (old: LinkType[] | undefined) => {
+        return old?.filter(l => l.id !== link.id);
+      });
+      return { previousLinks };
+    },
+    onSuccess: () => {
       toast.success("링크가 삭제되었습니다.");
-      setIsDeleteDialogOpen(false);
-    } catch (error) {
+    },
+    onError: (error, newLink, context) => {
+      queryClient.setQueryData(["links", targetUid], context?.previousLinks);
       console.error("Error deleting link:", error);
       toast.error("링크 삭제에 실패했습니다.");
-    } finally {
-      setIsDeleting(false);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["links", targetUid] });
     }
-  };
+  });
 
   if (isEditing) {
     return (
       <Card className="p-4 bg-card text-card-foreground border-border rounded-xl shadow-sm">
-        <form onSubmit={handleSubmit(onEditSubmit)} className="space-y-4">
+        <form onSubmit={handleSubmit((data) => updateMutation.mutate(data))} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor={`edit-title-${link.id}`} className={errors.title ? "text-destructive" : ""}>제목</Label>
             <Input
@@ -148,8 +184,8 @@ function LinkItem({ link, targetUid, isOwner }: LinkItemProps) {
             <Button type="button" variant="outline" className="flex-1" onClick={() => setIsEditing(false)}>
               취소
             </Button>
-            <Button type="submit" className="flex-1" disabled={isSubmitting}>
-              {isSubmitting ? "저장 중..." : "저장하기"}
+            <Button type="submit" className="flex-1" disabled={updateMutation.isPending}>
+              {updateMutation.isPending ? "저장 중..." : "저장하기"}
             </Button>
           </div>
         </form>
@@ -220,11 +256,11 @@ function LinkItem({ link, targetUid, isOwner }: LinkItemProps) {
                 <p className="text-destructive text-center font-semibold text-base">이 작업은 되돌릴 수 없습니다.</p>
               </div>
               <div className="flex gap-3 w-full">
-                <Button variant="outline" className="flex-1 h-12 text-base" onClick={() => setIsDeleteDialogOpen(false)} disabled={isDeleting}>
+                <Button variant="outline" className="flex-1 h-12 text-base" onClick={() => setIsDeleteDialogOpen(false)} disabled={deleteMutation.isPending}>
                   취소
                 </Button>
-                <Button variant="destructive" className="flex-1 h-12 text-base" onClick={handleDelete} disabled={isDeleting}>
-                  {isDeleting ? "삭제 중..." : "삭제하기"}
+                <Button variant="destructive" className="flex-1 h-12 text-base" onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending}>
+                  {deleteMutation.isPending ? "삭제 중..." : "삭제하기"}
                 </Button>
               </div>
             </DialogContent>
@@ -235,37 +271,32 @@ function LinkItem({ link, targetUid, isOwner }: LinkItemProps) {
   );
 }
 
-export default function LinkManager({ targetUid }: { targetUid: string }) {
+export default function LinkManager({ targetUid, readonly = false }: { targetUid: string, readonly?: boolean }) {
   const { user } = useAuth();
-  const isOwner = user?.uid === targetUid;
-  const [links, setLinks] = useState<LinkType[]>([]);
+  const isOwner = !readonly && user?.uid === targetUid;
   const [isOpen, setIsOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     setIsMounted(true);
-    const q = query(
-      collection(db, "users", targetUid, "links"),
-      orderBy("createdAt", "desc")
-    );
+  }, []);
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedLinks = snapshot.docs.map((doc) => ({
+  const { data: links = [], isLoading } = useQuery({
+    queryKey: ["links", targetUid],
+    queryFn: async () => {
+      const q = query(
+        collection(db, "users", targetUid, "links"),
+        orderBy("createdAt", "desc")
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       })) as LinkType[];
-      setLinks(fetchedLinks);
-      setIsLoading(false);
-    }, (error) => {
-      console.error("Error fetching links:", error);
-      toast.error("링크 목록을 불러오는데 실패했습니다.");
-      setIsLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
+    },
+    enabled: !!targetUid,
+  });
 
   const {
     register,
@@ -280,38 +311,65 @@ export default function LinkManager({ targetUid }: { targetUid: string }) {
     },
   });
 
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    setIsSubmitting(true);
-    let parsedUrl = values.url;
-    if (!/^https?:\/\//i.test(values.url)) {
-      parsedUrl = `https://${values.url}`;
-    }
+  const addMutation = useMutation({
+    mutationFn: async (values: z.infer<typeof formSchema>) => {
+      let parsedUrl = values.url;
+      if (!/^https?:\/\//i.test(values.url)) {
+        parsedUrl = `https://${values.url}`;
+      }
 
-    let domain = "";
-    try {
-      domain = new URL(parsedUrl).hostname;
-    } catch {
-      domain = "example.com";
-    }
+      let domain = "";
+      try {
+        domain = new URL(parsedUrl).hostname;
+      } catch {
+        domain = "example.com";
+      }
 
-    try {
       await addDoc(collection(db, "users", targetUid, "links"), {
         title: values.title,
         url: parsedUrl,
         icon: `https://s2.googleusercontent.com/s2/favicons?domain=${domain}`,
         createdAt: serverTimestamp(),
       });
+    },
+    onMutate: async (values) => {
+      setIsOpen(false); // 즉각적인 피드백 (모달 닫기)
+      reset(); // 즉각적인 폼 초기화
+      
+      await queryClient.cancelQueries({ queryKey: ["links", targetUid] });
+      const previousLinks = queryClient.getQueryData(["links", targetUid]);
 
+      let parsedUrl = values.url;
+      if (!/^https?:\/\//i.test(values.url)) {
+        parsedUrl = `https://${values.url}`;
+      }
+      let domain = "";
+      try { domain = new URL(parsedUrl).hostname; } catch { domain = "example.com"; }
+
+      queryClient.setQueryData(["links", targetUid], (old: LinkType[] | undefined) => {
+        const optimisticLink: LinkType = {
+          id: Math.random().toString(), // 임시 ID
+          title: values.title,
+          url: parsedUrl,
+          icon: `https://s2.googleusercontent.com/s2/favicons?domain=${domain}`,
+        };
+        return [optimisticLink, ...(old || [])];
+      });
+
+      return { previousLinks };
+    },
+    onSuccess: () => {
       toast.success("새로운 링크가 추가되었습니다.");
-      setIsOpen(false);
-      reset();
-    } catch (error) {
+    },
+    onError: (error, newLink, context) => {
+      queryClient.setQueryData(["links", targetUid], context?.previousLinks);
       console.error("Error adding link:", error);
       toast.error("링크 추가에 실패했습니다.");
-    } finally {
-      setIsSubmitting(false);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["links", targetUid] });
     }
-  };
+  });
 
   if (!isMounted) {
     return (
@@ -344,7 +402,7 @@ export default function LinkManager({ targetUid }: { targetUid: string }) {
             <DialogHeader>
               <DialogTitle>새 링크 추가</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-4">
+            <form onSubmit={handleSubmit((data) => addMutation.mutate(data))} className="space-y-4 mt-4">
               <div className="space-y-2">
                 <Label htmlFor="title" className={errors.title ? "text-destructive" : ""}>제목</Label>
                 <Input
@@ -369,8 +427,8 @@ export default function LinkManager({ targetUid }: { targetUid: string }) {
                   <p className="text-sm text-destructive font-medium">{errors.url.message}</p>
                 )}
               </div>
-              <Button type="submit" className="w-full" disabled={isSubmitting}>
-                {isSubmitting ? "추가 중..." : "추가하기"}
+              <Button type="submit" className="w-full" disabled={addMutation.isPending}>
+                {addMutation.isPending ? "추가 중..." : "추가하기"}
               </Button>
             </form>
           </DialogContent>

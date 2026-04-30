@@ -1,7 +1,15 @@
+"use client";
+
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/components/AuthProvider";
+import { useQuery } from "@tanstack/react-query";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import ProfileEditor from "@/components/ProfileEditor";
+import LinkManager from "@/components/LinkManager";
 
-export default function Home() {
+function LandingPage() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-3.5rem)] px-4 text-center">
       <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-6">
@@ -24,4 +32,77 @@ export default function Home() {
       </div>
     </div>
   );
+}
+
+function Dashboard({ uid }: { uid: string }) {
+  const { data: userData, isLoading } = useQuery({
+    queryKey: ["userProfile", uid],
+    queryFn: async () => {
+      const userRef = doc(db, "users", uid);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        const rawData = userSnap.data();
+        return {
+          photoURL: rawData.photoURL || null,
+          username: rawData.username || null,
+          bio: rawData.bio || null,
+          displayName: rawData.displayName || null,
+        };
+      }
+      return null;
+    },
+    enabled: !!uid,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!userData) {
+    return (
+      <div className="min-h-[calc(100vh-3.5rem)] flex flex-col items-center justify-center p-4 text-center">
+        <h1 className="text-2xl font-bold mb-2">프로필 정보를 불러올 수 없습니다.</h1>
+        <p className="text-muted-foreground">잠시 후 다시 시도해주세요.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-[calc(100vh-3.5rem)] bg-background flex flex-col items-center py-16 px-4 font-sans text-foreground">
+      <div className="w-full max-w-md space-y-8">
+        {/* 프로필 편집 (내 마이페이지이므로 readonly=false) */}
+        <ProfileEditor 
+          userData={userData as any} 
+          targetUid={uid} 
+          currentDisplayName={userData.displayName || ""} 
+          readonly={false}
+        />
+
+        {/* 링크 목록 및 관리 섹션 (내 마이페이지이므로 readonly=false) */}
+        <LinkManager targetUid={uid} readonly={false} />
+      </div>
+    </div>
+  );
+}
+
+export default function Home() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (user) {
+    return <Dashboard uid={user.uid} />;
+  }
+
+  return <LandingPage />;
 }

@@ -59,6 +59,12 @@ export default function Header() {
                       내 페이지 미리보기
                     </DropdownMenuItem>
                     <DropdownMenuItem 
+                      className="cursor-pointer w-full"
+                      onClick={() => window.location.href = `/stats`}
+                    >
+                      통계
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
                       className="cursor-pointer" 
                       onClick={() => {
                         navigator.clipboard.writeText(`${window.location.origin}/${user.displayName}`);

@@ -8,8 +8,11 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import ProfileEditor from "@/components/ProfileEditor";
 import LinkManager from "@/components/LinkManager";
+import { IconBrandGoogle } from "@tabler/icons-react";
 
 function LandingPage() {
+  const { signInWithGoogle } = useAuth();
+
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-3.5rem)] px-4 text-center">
       <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-6">
@@ -24,11 +27,18 @@ function LandingPage() {
         <div className="bg-muted px-6 py-4 rounded-xl border text-sm text-left shadow-sm">
           <p className="font-semibold mb-2">🚀 시작하는 방법:</p>
           <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
-            <li>우측 상단의 <strong className="text-foreground">Google 로그인</strong> 버튼 클릭</li>
+            <li>아래의 <strong className="text-foreground">Google 계정으로 시작하기</strong> 버튼 클릭</li>
             <li>자동으로 생성된 나만의 프로필 주소 확인</li>
             <li>내 프로필에서 링크 추가 및 관리</li>
           </ol>
         </div>
+      </div>
+
+      <div className="mt-8">
+        <Button size="lg" onClick={signInWithGoogle} className="flex items-center gap-2 text-lg h-14 px-8 rounded-full shadow-lg hover:shadow-xl transition-all hover:-translate-y-1">
+          <IconBrandGoogle className="w-6 h-6" />
+          <span>Google 계정으로 시작하기</span>
+        </Button>
       </div>
     </div>
   );

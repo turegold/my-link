@@ -17,10 +17,10 @@ import { Label } from "@/components/ui/label";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { collection, addDoc, query, orderBy, serverTimestamp, doc, updateDoc, deleteDoc, getDocs } from "firebase/firestore";
+import { collection, addDoc, query, orderBy, serverTimestamp, doc, updateDoc, deleteDoc, getDocs, increment } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { toast } from "sonner";
-import { IconEdit, IconTrash } from "@tabler/icons-react";
+import { IconEdit, IconTrash, IconPointer } from "@tabler/icons-react";
 
 import { useAuth } from "@/components/AuthProvider";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -47,6 +47,27 @@ function LinkItem({ link, targetUid, isOwner }: LinkItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const queryClient = useQueryClient();
+
+  const handleLinkClick = async () => {
+    if (!link.id) return;
+
+    // 즉각적인 UI 업데이트 (Optimistic Update)
+    queryClient.setQueryData(["links", targetUid], (old: LinkType[] | undefined) => {
+      if (!old) return old;
+      return old.map(l => l.id === link.id ? { ...l, clickCount: (l.clickCount || 0) + 1 } : l);
+    });
+
+    try {
+      const linkRef = doc(db, "users", targetUid, "links", link.id);
+      await updateDoc(linkRef, {
+        clickCount: increment(1)
+      });
+    } catch (error) {
+      console.error("Failed to update click count:", error);
+      // 실패 시 데이터 롤백을 위해 쿼리 무효화
+      queryClient.invalidateQueries({ queryKey: ["links", targetUid] });
+    }
+  };
 
   const {
     register,
@@ -199,6 +220,7 @@ function LinkItem({ link, targetUid, isOwner }: LinkItemProps) {
         href={link.url}
         target="_blank"
         rel="noopener noreferrer"
+        onClick={handleLinkClick}
         className="block w-full hover:-translate-y-1 hover:shadow-md transition-all duration-200 active:translate-y-0 active:shadow-sm"
       >
         <Card className="flex flex-row items-center p-4 bg-card text-card-foreground border-border rounded-xl">
@@ -210,9 +232,15 @@ function LinkItem({ link, targetUid, isOwner }: LinkItemProps) {
           ) : (
             <div className="w-8 h-8 mr-4 flex-shrink-0" />
           )}
-          <span className="flex-1 text-left font-bold text-lg pr-16 tracking-tight truncate">
+          <span className="flex-1 text-left font-bold text-lg pr-4 tracking-tight truncate">
             {link.title}
           </span>
+          {isOwner && (
+            <div className="flex items-center gap-1 text-sm text-muted-foreground whitespace-nowrap mr-20">
+              <IconPointer className="w-4 h-4" />
+              <span>{link.clickCount || 0}</span>
+            </div>
+          )}
         </Card>
       </a>
 
